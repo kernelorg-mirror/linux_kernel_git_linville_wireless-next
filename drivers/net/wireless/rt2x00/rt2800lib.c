@@ -1813,6 +1813,75 @@ void rt2800_config_ant(struct rt2x00_dev *rt2x00dev, struct antenna_setup *ant)
 }
 EXPORT_SYMBOL_GPL(rt2800_config_ant);
 
+void rt2800_update_aggr_stats(struct rt2x00_dev *rt2x00dev)
+{
+	u32 reg;
+	u32 all;
+	int i;
+
+	rt2800_register_read(rt2x00dev,TX_AGG_CNT, &reg);
+	rt2x00dev->aggr_stats.no_aggr =
+		rt2x00_get_field32(reg,TX_AGG_CNT_NON_AGG_TX_COUNT);
+	rt2x00dev->aggr_stats.all_aggr =
+		rt2x00_get_field32(reg,TX_AGG_CNT_AGG_TX_COUNT);
+
+	rt2800_register_read(rt2x00dev,TX_AGG_CNT0, &reg);
+	rt2x00dev->aggr_stats.ampduCount[0] =
+		rt2x00_get_field32(reg,TX_AGG_CNT0_AGG_SIZE_1_COUNT);
+	rt2x00dev->aggr_stats.ampduCount[1] =
+		rt2x00_get_field32(reg,TX_AGG_CNT0_AGG_SIZE_2_COUNT);
+
+	rt2800_register_read(rt2x00dev,TX_AGG_CNT1, &reg);
+	rt2x00dev->aggr_stats.ampduCount[2] =
+		rt2x00_get_field32(reg,TX_AGG_CNT1_AGG_SIZE_3_COUNT);
+	rt2x00dev->aggr_stats.ampduCount[3] =
+		rt2x00_get_field32(reg,TX_AGG_CNT1_AGG_SIZE_4_COUNT);
+
+	rt2800_register_read(rt2x00dev,TX_AGG_CNT2, &reg);
+	rt2x00dev->aggr_stats.ampduCount[4] =
+		rt2x00_get_field32(reg,TX_AGG_CNT2_AGG_SIZE_5_COUNT);
+	rt2x00dev->aggr_stats.ampduCount[5] =
+		rt2x00_get_field32(reg,TX_AGG_CNT2_AGG_SIZE_6_COUNT);
+
+	rt2800_register_read(rt2x00dev,TX_AGG_CNT3, &reg);
+	rt2x00dev->aggr_stats.ampduCount[6] =
+		rt2x00_get_field32(reg,TX_AGG_CNT3_AGG_SIZE_7_COUNT);
+	rt2x00dev->aggr_stats.ampduCount[7] =
+		rt2x00_get_field32(reg,TX_AGG_CNT3_AGG_SIZE_8_COUNT);
+
+	rt2800_register_read(rt2x00dev,TX_AGG_CNT4, &reg);
+	rt2x00dev->aggr_stats.ampduCount[8] =
+		rt2x00_get_field32(reg,TX_AGG_CNT4_AGG_SIZE_9_COUNT);
+	rt2x00dev->aggr_stats.ampduCount[9] =
+		rt2x00_get_field32(reg,TX_AGG_CNT4_AGG_SIZE_10_COUNT);
+
+	rt2800_register_read(rt2x00dev,TX_AGG_CNT5, &reg);
+	rt2x00dev->aggr_stats.ampduCount[10] =
+		rt2x00_get_field32(reg,TX_AGG_CNT5_AGG_SIZE_11_COUNT);
+	rt2x00dev->aggr_stats.ampduCount[11] =
+		rt2x00_get_field32(reg,TX_AGG_CNT5_AGG_SIZE_12_COUNT);
+
+	rt2800_register_read(rt2x00dev,TX_AGG_CNT6, &reg);
+	rt2x00dev->aggr_stats.ampduCount[12] =
+		rt2x00_get_field32(reg,TX_AGG_CNT6_AGG_SIZE_13_COUNT);
+	rt2x00dev->aggr_stats.ampduCount[13] =
+		rt2x00_get_field32(reg,TX_AGG_CNT6_AGG_SIZE_14_COUNT);
+
+	rt2800_register_read(rt2x00dev,TX_AGG_CNT7, &reg);
+	rt2x00dev->aggr_stats.ampduCount[14] =
+		rt2x00_get_field32(reg,TX_AGG_CNT7_AGG_SIZE_15_COUNT);
+	rt2x00dev->aggr_stats.ampduCount[15] =
+		rt2x00_get_field32(reg,TX_AGG_CNT7_AGG_SIZE_16_COUNT);
+
+	all = rt2x00dev->aggr_stats.no_aggr +
+		rt2x00dev->aggr_stats.all_aggr;
+
+	for( i = 0; i < 16 ; i++)
+		rt2x00dev->aggr_stats.ampduRatio[i] =
+			((rt2x00dev->aggr_stats.ampduCount[i] * 100) / all);
+}
+EXPORT_SYMBOL_GPL(rt2800_update_aggr_stats);
+
 static void rt2800_config_lna_gain(struct rt2x00_dev *rt2x00dev,
 				   struct rt2x00lib_conf *libconf)
 {

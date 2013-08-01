@@ -225,6 +225,79 @@ static enum hrtimer_restart rt2800usb_tx_sta_fifo_timeout(struct hrtimer *timer)
 	return HRTIMER_NORESTART;
 }
 
+
+
+static bool rt2800usb_tx_agg_cnt_read_completed(struct rt2x00_dev *rt2x00dev,
+					   int urb_status, u32 reg)
+{
+
+	if (urb_status) {
+		WARNING(rt2x00dev, "TX status read failed %d\n", urb_status);
+		return false;
+	}
+
+	if(rt2x00dev->aggr_stats.cnt == 0) {
+		rt2x00dev->aggr_stats.no_aggr =
+			rt2x00_get_field32(reg,TX_AGG_CNT_NON_AGG_TX_COUNT);
+		rt2x00dev->aggr_stats.all_aggr =
+			rt2x00_get_field32(reg,TX_AGG_CNT_AGG_TX_COUNT);
+	} else {
+		unsigned int tmp = (rt2x00dev->aggr_stats.cnt - 1)*2;
+
+		rt2x00dev->aggr_stats.ampduCount[tmp] =
+		rt2x00_get_field32(reg,TX_AGG_CNT0_AGG_SIZE_1_COUNT);
+		rt2x00dev->aggr_stats.ampduCount[tmp+1] =
+		rt2x00_get_field32(reg,TX_AGG_CNT0_AGG_SIZE_2_COUNT);
+	}
+
+	if(rt2x00dev->aggr_stats.cnt == 9) {
+		rt2x00dev->aggr_stats.cnt = 0;
+		clear_bit(TX_AGG_TIMER, &rt2x00dev->aggr_stats.flags);
+	} else {
+		rt2x00dev->aggr_stats.cnt++;
+		/* Read next TX_AGG_CNT register after 1 ms */
+		hrtimer_start(&rt2x00dev->txaggcnt_timer,
+			      ktime_set(0, 1000000), HRTIMER_MODE_REL);
+	}
+
+	 return true;
+}
+
+static enum hrtimer_restart rt2800usb_tx_agg_cnt_timeout(struct hrtimer *timer)
+{
+	struct rt2x00_dev *rt2x00dev =
+	    container_of(timer, struct rt2x00_dev, txaggcnt_timer);
+	unsigned int offset;
+
+	offset = TX_AGG_CNT + rt2x00dev->aggr_stats.cnt*4;
+	rt2x00usb_register_read_async(rt2x00dev,offset,
+				      rt2800usb_tx_agg_cnt_read_completed);
+
+	return HRTIMER_NORESTART;
+}
+
+static void rt2800usb_async_read_tx_agg_cnt(struct rt2x00_dev *rt2x00dev)
+{
+
+	if (test_and_set_bit(TX_AGG_TIMER, &rt2x00dev->aggr_stats.flags))
+		return;
+
+	/* Read TX_AGG_CNT register after 1 ms */
+	hrtimer_start(&rt2x00dev->txaggcnt_timer, ktime_set(0, 1000000),
+		      HRTIMER_MODE_REL);
+}
+
+static void rt2800usb_timer_txagg(unsigned long data)
+{
+	struct rt2x00_dev *rt2x00dev = (struct rt2x00_dev *)data;
+
+	if (!test_bit(TX_AGG_TIMER, &rt2x00dev->aggr_stats.flags))
+		rt2800usb_async_read_tx_agg_cnt(rt2x00dev);
+
+	rt2x00dev->txagg_timer.expires += 5000;
+	add_timer(&rt2x00dev->txagg_timer);
+}
+
 /*
  * Firmware functions
  */
@@ -750,6 +823,7 @@ static int rt2800usb_read_eeprom(struct rt2x00_dev *rt2x00dev)
 static int rt2800usb_probe_hw(struct rt2x00_dev *rt2x00dev)
 {
 	int retval;
+	unsigned long j = jiffies;
 
 	retval = rt2800_probe_hw(rt2x00dev);
 	if (retval)
@@ -764,6 +838,24 @@ static int rt2800usb_probe_hw(struct rt2x00_dev *rt2x00dev)
 	 * Overwrite TX done handler
 	 */
 	PREPARE_WORK(&rt2x00dev->txdone_work, rt2800usb_work_txdone);
+
+	/*
+	 * Set txaggcnt timer function. for usb async read
+	 */
+	rt2x00dev->txaggcnt_timer.function = rt2800usb_tx_agg_cnt_timeout;
+
+	/*
+	 * Set txagg timer function. periodic read
+	 */
+	clear_bit(TX_AGG_TIMER, &rt2x00dev->aggr_stats.flags);
+	rt2x00dev->aggr_stats.cnt = 0;
+	init_timer(&rt2x00dev->txagg_timer);
+	rt2x00dev->txagg_timer.function = rt2800usb_timer_txagg;
+	rt2x00dev->txagg_timer.data = (unsigned long)rt2x00dev;
+
+	j = jiffies;
+	rt2x00dev->txagg_timer.expires = j + 5000;
+	add_timer(&rt2x00dev->txagg_timer);
 
 	return 0;
 }

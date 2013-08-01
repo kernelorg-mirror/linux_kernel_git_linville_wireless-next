@@ -813,6 +813,8 @@ int rt2x00usb_probe(struct usb_interface *usb_intf,
 	INIT_WORK(&rt2x00dev->txdone_work, rt2x00usb_work_txdone);
 	hrtimer_init(&rt2x00dev->txstatus_timer, CLOCK_MONOTONIC,
 		     HRTIMER_MODE_REL);
+	hrtimer_init(&rt2x00dev->txaggcnt_timer, CLOCK_MONOTONIC,
+		     HRTIMER_MODE_REL);
 
 	retval = rt2x00usb_alloc_reg(rt2x00dev);
 	if (retval)

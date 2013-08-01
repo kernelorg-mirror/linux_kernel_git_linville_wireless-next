@@ -75,6 +75,7 @@ struct rt2x00debug_intf {
 	 *     - frame dump file
 	 *     - queue stats file
 	 *     - crypto stats file
+	 *     - aggr stats file
 	 */
 	struct dentry *driver_folder;
 	struct dentry *driver_entry;
@@ -96,6 +97,7 @@ struct rt2x00debug_intf {
 	struct dentry *queue_frame_dump_entry;
 	struct dentry *queue_stats_entry;
 	struct dentry *crypto_stats_entry;
+	struct dentry *aggr_stats_entry;
 
 	/*
 	 * The frame dump file only allows a single reader,
@@ -589,6 +591,63 @@ static const struct file_operations rt2x00debug_fop_cap_flags = {
 	.llseek		= default_llseek,
 };
 
+
+static ssize_t rt2x00debug_read_aggr_stats(struct file *file,
+					  char __user *buf,
+					  size_t length,
+					  loff_t *offset)
+{
+	struct rt2x00debug_intf *intf =	file->private_data;
+	struct rt2x00_dev *rt2x00dev = intf->rt2x00dev;
+	size_t size;
+	char *data;
+	char *temp;
+	int i;
+
+	if (*offset)
+		return 0;
+
+	data = kzalloc(17 * MAX_LINE_LENGTH, GFP_KERNEL);
+	if (!data)
+		return 0;
+
+	temp = data;
+	temp += sprintf(temp, "all aggr(%u) no agg(%u) \n",
+		       rt2x00dev->aggr_stats.all_aggr,
+		       rt2x00dev->aggr_stats.no_aggr);
+
+	for (i = 0; i < 15 ; i++) {
+		temp += sprintf(temp, "%u AMPDU cnt(%u), ratio(%u)\n", (i+1),
+		       rt2x00dev->aggr_stats.ampduCount[i],
+		       rt2x00dev->aggr_stats.ampduRatio[i]);
+	}
+
+	temp += sprintf(temp, "16 or up AMPDU cnt(%u), ratio(%u)\n",
+			rt2x00dev->aggr_stats.ampduCount[i],
+			rt2x00dev->aggr_stats.ampduRatio[i]);
+
+	size = strlen(data);
+	size = min(size, length);
+
+	if (copy_to_user(buf, data, size)) {
+		kfree(data);
+		return -EFAULT;
+	}
+
+	kfree(data);
+
+	*offset += size;
+	return size;
+}
+
+static const struct file_operations rt2x00debug_fop_aggr_stats = {
+	.owner		= THIS_MODULE,
+	.read		= rt2x00debug_read_aggr_stats,
+	.open		= rt2x00debug_file_open,
+	.release	= rt2x00debug_file_release,
+	.llseek		= default_llseek,
+};
+
 static struct dentry *rt2x00debug_create_file_driver(const char *name,
 						     struct rt2x00debug_intf
 						     *intf,
@@ -694,6 +753,12 @@ void rt2x00debug_register(struct rt2x00_dev *rt2x00dev)
 	if (IS_ERR(intf->cap_flags) || !intf->cap_flags)
 		goto exit;
 
+	intf->aggr_stats_entry = debugfs_create_file("aggr_stats", S_IRUSR,
+					      intf->driver_folder, intf,
+					      &rt2x00debug_fop_aggr_stats);
+	if (IS_ERR(intf->aggr_stats_entry) || !intf->aggr_stats_entry)
+		goto exit;
+
 	intf->register_folder =
 	    debugfs_create_dir("register", intf->driver_folder);
 	if (IS_ERR(intf->register_folder) || !intf->register_folder)
@@ -794,6 +859,7 @@ void rt2x00debug_deregister(struct rt2x00_dev *rt2x00dev)
 	debugfs_remove(intf->chipset_entry);
 	debugfs_remove(intf->driver_entry);
 	debugfs_remove(intf->driver_folder);
+	debugfs_remove(intf->aggr_stats_entry);
 	kfree(intf->chipset_blob.data);
 	kfree(intf->driver_blob.data);
 	kfree(intf);

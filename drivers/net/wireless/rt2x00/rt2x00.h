@@ -637,6 +637,7 @@ struct rt2x00lib_ops {
 			struct ieee80211_sta *sta);
 	int (*sta_remove) (struct rt2x00_dev *rt2x00dev,
 			   int wcid);
+	void (*update_aggr_stats) (struct rt2x00_dev *rt2x00dev);
 };
 
 /*
@@ -733,6 +734,24 @@ enum {
 	NUM_IF_COMB,
 };
 
+#define RT2X00_AGGR_CNT_MAX 16
+
+/*
+ * rt2x00 aggregation state flags
+ */
+enum rt2x00_agg_state_flags {
+	TX_AGG_TIMER,
+};
+struct rt2x00_aggr_stats {
+	unsigned long flags;
+	unsigned int cnt;
+	u32 all_aggr;
+	u32 no_aggr;
+	u32 ampduCount[RT2X00_AGGR_CNT_MAX];
+	u32 ampduRatio[RT2X00_AGGR_CNT_MAX];
+};
+
+
 /*
  * rt2x00 device structure.
  */
@@ -763,6 +782,8 @@ struct rt2x00_dev {
 	struct ieee80211_supported_band bands[IEEE80211_NUM_BANDS];
 	enum ieee80211_band curr_band;
 	int curr_freq;
+
+	struct rt2x00_aggr_stats aggr_stats;
 
 	/*
 	 * If enabled, the debugfs interface structures
@@ -982,6 +1003,13 @@ struct rt2x00_dev {
 	 * Timer to ensure tx status reports are read (rt2800usb).
 	 */
 	struct hrtimer txstatus_timer;
+
+	/*
+	 * Timer to ensure tx aggregation counter reports are read (rt2800usb).
+	 */
+	struct hrtimer txaggcnt_timer;
+
+	struct timer_list txagg_timer;
 
 	/*
 	 * Tasklet for processing tx status reports (rt2800pci).
